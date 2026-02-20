@@ -105,5 +105,58 @@ GROUP BY MONTH(pr.month);
 
 -- 17)
 
+SELECT DISTINCT e.emp_id, e.name, p.net_salary
+FROM employees e
+JOIN payroll p ON p.emp_id = e.emp_id
+WHERE p.net_salary >
+(
+    SELECT AVG(p2.net_salary)
+    FROM payroll p2
+    JOIN employees e2 ON p2.emp_id = e2.emp_id
+    WHERE e2.dept_id = e.dept_id
+);
 
+-- 18)
 
+SELECT curr.emp_id, e.name, prev.rating AS prev_rating, curr.rating AS curr_rating
+ FROM performance_reviews curr
+ JOIN performance_reviews prev ON curr.emp_id = prev.emp_id
+     AND curr.period > prev.period
+ JOIN employees e ON curr.emp_id = e.emp_id
+ WHERE curr.rating > prev.rating
+ AND NOT EXISTS (
+     SELECT 1 FROM performance_reviews mid
+     WHERE mid.emp_id = curr.emp_id AND mid.period > prev.period AND mid.period < curr.period
+ );
+
+-- 19)
+
+SELECT e.emp_id, e.name FROM employees e
+WHERE e.emp_id IN (SELECT DISTINCT emp_id FROM training_enrollments WHERE status = 'optional')
+AND e.emp_id NOT IN (SELECT DISTINCT emp_id FROM training_enrollments WHERE status = 'mandatory');
+
+-- 20)
+
+CREATE OR REPLACE VIEW emp_dashboard AS
+ SELECT
+     e.emp_id, e.name AS employee, d.name AS department, r.title AS role,
+     ROUND(att.present_days * 100.0 / att.total_days, 2) AS attendance_pct,
+     ROUND(pr_avg.avg_rating, 2) AS avg_rating,
+     pay_latest.net_salary AS latest_salary
+ FROM employees e
+ JOIN departments d ON e.dept_id = d.dept_id
+ JOIN roles r ON e.role_id = r.role_id
+ LEFT JOIN (
+     SELECT emp_id, COUNT(*) AS total_days,
+            SUM(status IN ('present','wfh')) AS present_days
+     FROM attendance GROUP BY emp_id
+ ) att ON att.emp_id = e.emp_id
+ LEFT JOIN (
+     SELECT emp_id, AVG(rating) AS avg_rating
+     FROM performance_reviews GROUP BY emp_id
+ ) pr_avg ON pr_avg.emp_id = e.emp_id
+ LEFT JOIN (
+    SELECT emp_id, net_salary
+     FROM payroll WHERE month = (SELECT MAX(month) FROM payroll p2 WHERE p2.emp_id = payroll.emp_id)
+) pay_latest ON pay_latest.emp_id = e.emp_id;
+SELECT * FROM emp_dashboard;
